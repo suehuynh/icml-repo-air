@@ -148,6 +148,7 @@ def main() -> None:
         # CUDA OOM on a10g-small during real testing.
         model_init_kwargs={"torch_dtype": "bfloat16"} if has_cuda else None,
         gradient_checkpointing=has_cuda,
+        max_completion_length=CONFIG.training.max_completion_length,
     )
 
     trainer = AIRTrainer(

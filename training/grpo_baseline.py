@@ -128,6 +128,7 @@ def main() -> None:
         # Trades compute for activation memory, cheap insurance against
         # OOM recurring at a slightly larger step/batch config later.
         gradient_checkpointing=has_cuda,
+        max_completion_length=CONFIG.training.max_completion_length,
     )
 
     trainer = GRPOTrainer(

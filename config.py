@@ -73,6 +73,17 @@ class TrainingConfig:
     # generation batch (one full meta-group, K-repeated) per call.
     per_device_train_batch_size: int = 12
     gradient_accumulation_steps: int = 1
+
+    # SUBSTITUTE, added after a real CUDA OOM during GPU testing. TRL
+    # defaults this to 256 tokens if unset. AIRTrainer's auxiliary loss
+    # runs a SECOND forward pass through the model per step (see
+    # training/air_trainer.py's module docstring, an accepted memory/
+    # simplicity tradeoff), which roughly doubles the size of every
+    # activation tensor, including the vocab-sized logits tensor, the
+    # single largest memory consumer in this kind of per-token-logprob
+    # computation. Shortening completions directly shrinks that. Not a
+    # paper-specified value, a documented compute-budget compromise.
+    max_completion_length: int = 128
     seed: int = 42
 
 
