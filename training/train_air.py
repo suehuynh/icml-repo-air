@@ -23,7 +23,6 @@ from data.advbench_loader import load_advbench_intents, build_meta_groups
 from data.group_sampler import HeterogeneousGroupSampler
 from rewards.safety_task_reward import CompositeSafetyReward
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -63,7 +62,14 @@ def build_reward_function(composite_reward: CompositeSafetyReward):
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--smoke-test", action="store_true")
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Use DEBUG to see the AIR aux_loss=... grpo_loss=... line per step.",
+    )
     args = parser.parse_args()
+    logging.basicConfig(level=getattr(logging, args.log_level))
 
     train_dataset, ood_dataset = build_dataset(smoke_test=args.smoke_test)
     composite_reward = CompositeSafetyReward()
