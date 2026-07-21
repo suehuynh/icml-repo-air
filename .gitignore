@@ -1,0 +1,15 @@
+.agents
+.claude
+.pytest_cache
+.trackio
+*/__pycache__
+.env
+.venv/
+outputs/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.safetensors
+*.bin
+air_smoke_log.txt
+air_smoke_debug_log.txt
