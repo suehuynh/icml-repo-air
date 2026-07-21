@@ -49,10 +49,13 @@ class TrainingConfig:
     air_lambda: float = 8e-4         # AIR regularization coefficient
 
     # PAPER: 3000 steps on the full mixed (Safety + Moral + Math) dataset.
-    # SUBSTITUTE: Safety-only scope, scaled step count. Start conservative,
-    # raise toward 3000 only if the GPU credit allows it. Log the actual
-    # value used, this affects your toy vs full verdict.
-    num_train_steps: int = 300
+    # SUBSTITUTE: Safety-only scope, scaled step count AND rebalanced
+    # against the gradient_accumulation_steps change below: 75 steps * 4
+    # grad_accum = 300 total micro-batches processed, same total compute
+    # as the previous 300 steps * 1 grad_accum, just distributed
+    # differently. Log the actual value used, this affects your toy vs
+    # full verdict.
+    num_train_steps: int = 75
 
     # SUBSTITUTE, our own choice (paper doesn't specify batch size, only K).
     # CORRECTED after empirical testing: per_device_train_batch_size is the
@@ -67,12 +70,27 @@ class TrainingConfig:
     # during testing, despite MetaGroupRepeatSampler's construction-time
     # check passing (that check alone wasn't sufficient).
     #
-    # Set per_device_train_batch_size = meta_group_size(4) * group_size_k(3)
-    # = 12 exactly, with gradient_accumulation_steps = 1, so there is no
-    # micro-batch chunking at all: _compute_loss sees one complete
-    # generation batch (one full meta-group, K-repeated) per call.
+    # per_device_train_batch_size = meta_group_size(4) * group_size_k(3)
+    # = 12 exactly, so each MICRO-batch is one complete meta-group, no
+    # mid-group chunking.
     per_device_train_batch_size: int = 12
-    gradient_accumulation_steps: int = 1
+
+    # CHANGED after observing grpo_loss=0.000000 on real GPU runs. Root
+    # cause: at grad_accum=1, every micro-batch is EXACTLY one meta-group
+    # (4 distinct prompts). GRPO's advantage is reward minus the mean
+    # reward of a prompt's own K repeats, zero-mean by construction; a
+    # batch of only 4 distinct prompts can land on a near-zero AGGREGATE
+    # policy-gradient loss just by chance (worsened since some prompts get
+    # zero-variance rewards across their K repeats, confirmed happening
+    # ~37.5% of the time via the smoke test's frac_reward_zero_std metric).
+    # This is not a smoke-test-only artifact, it recurs on EVERY step at
+    # grad_accum=1, since batch composition is structurally always 1 group.
+    # Raising this to 4 means each weight update is informed by gradients
+    # accumulated across 4 different meta-groups, making a near-zero
+    # aggregate signal far less likely by chance. Does NOT increase
+    # per-micro-step memory (each micro-batch is still just 1 group), so
+    # this doesn't reopen the earlier OOM issue.
+    gradient_accumulation_steps: int = 4
 
     # SUBSTITUTE, added after a real CUDA OOM during GPU testing. TRL
     # defaults this to 256 tokens if unset. AIRTrainer's auxiliary loss
