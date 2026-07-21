@@ -49,48 +49,46 @@ class TrainingConfig:
     air_lambda: float = 8e-4         # AIR regularization coefficient
 
     # PAPER: 3000 steps on the full mixed (Safety + Moral + Math) dataset.
-    # SUBSTITUTE: Safety-only scope, scaled step count AND rebalanced
-    # against the gradient_accumulation_steps change below: 75 steps * 4
-    # grad_accum = 300 total micro-batches processed, same total compute
-    # as the previous 300 steps * 1 grad_accum, just distributed
-    # differently. Log the actual value used, this affects your toy vs
-    # full verdict.
+    # SUBSTITUTE: Safety-only scope, scaled step count, rebalanced against
+    # per_device_train_batch_size below: 75 steps * 48 rows/step = 3600
+    # total rows processed, matching the original 300-steps * 12-rows/step
+    # plan's total compute. Log the actual value used, this affects your
+    # toy vs full verdict.
     num_train_steps: int = 75
 
     # SUBSTITUTE, our own choice (paper doesn't specify batch size, only K).
     # CORRECTED after empirical testing: per_device_train_batch_size is the
     # literal row count (INCLUDING the K repeated completions) each device
     # processes per micro-step, not a "distinct prompts" count as originally
-    # assumed. Gradient accumulation replays additional micro-steps of this
-    # same size. If per_device_train_batch_size isn't itself a whole
-    # multiple of (meta_group_size * group_size_k), a micro-step's row
-    # slice can cut partway through a prompt's K repeats or across group
-    # members, which is exactly what caused AIRTrainer's "N group(s) had no
-    # anchor or no open-variant member" warning to fire on every step
-    # during testing, despite MetaGroupRepeatSampler's construction-time
-    # check passing (that check alone wasn't sufficient).
+    # assumed. If per_device_train_batch_size isn't itself a whole multiple
+    # of (meta_group_size * group_size_k), a micro-step's row slice can cut
+    # partway through a prompt's K repeats or across group members, which
+    # is exactly what caused AIRTrainer's "N group(s) had no anchor or no
+    # open-variant member" warning to fire during testing.
     #
-    # per_device_train_batch_size = meta_group_size(4) * group_size_k(3)
-    # = 12 exactly, so each MICRO-batch is one complete meta-group, no
-    # mid-group chunking.
-    per_device_train_batch_size: int = 12
+    # SECOND CORRECTION: an earlier version of this file tried to fix
+    # near-zero grpo_loss (see below) by raising gradient_accumulation_steps
+    # to 4 instead of scaling this value. That reintroduced the SAME "no
+    # anchor/open-variant" warning: raising gradient_accumulation_steps
+    # makes TRL generate one larger batch, then internally CHUNK it into
+    # several per-device micro-batches, an internal TRL code path this
+    # repo has not verified respects our sampler's group contiguity (and
+    # empirically, it does not). Scaling per_device_train_batch_size
+    # directly instead means TRL consumes the WHOLE generated batch in a
+    # single micro-step, with no internal chunking involved at all, the
+    # same shape already validated bug-free at the smaller scale.
+    #
+    # meta_group_size(4) * group_size_k(3) = 12 rows per meta-group.
+    # Covering 4 meta-groups per micro-step: 12 * 4 = 48. Requires enough
+    # GPU memory headroom, only attempt this on a GPU with real margin
+    # (this was moved to a100-large specifically for this reason after
+    # repeated OOMs on a10g-small at even the smaller batch=12 shape).
+    per_device_train_batch_size: int = 48
 
-    # CHANGED after observing grpo_loss=0.000000 on real GPU runs. Root
-    # cause: at grad_accum=1, every micro-batch is EXACTLY one meta-group
-    # (4 distinct prompts). GRPO's advantage is reward minus the mean
-    # reward of a prompt's own K repeats, zero-mean by construction; a
-    # batch of only 4 distinct prompts can land on a near-zero AGGREGATE
-    # policy-gradient loss just by chance (worsened since some prompts get
-    # zero-variance rewards across their K repeats, confirmed happening
-    # ~37.5% of the time via the smoke test's frac_reward_zero_std metric).
-    # This is not a smoke-test-only artifact, it recurs on EVERY step at
-    # grad_accum=1, since batch composition is structurally always 1 group.
-    # Raising this to 4 means each weight update is informed by gradients
-    # accumulated across 4 different meta-groups, making a near-zero
-    # aggregate signal far less likely by chance. Does NOT increase
-    # per-micro-step memory (each micro-batch is still just 1 group), so
-    # this doesn't reopen the earlier OOM issue.
-    gradient_accumulation_steps: int = 4
+    # REVERTED to 1: see the per_device_train_batch_size comment above,
+    # this avoids TRL's internal batch-chunking path entirely rather than
+    # trusting it to preserve meta-group contiguity.
+    gradient_accumulation_steps: int = 1
 
     # SUBSTITUTE, added after a real CUDA OOM during GPU testing. TRL
     # defaults this to 256 tokens if unset. AIRTrainer's auxiliary loss
