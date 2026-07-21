@@ -149,6 +149,15 @@ def main() -> None:
         model_init_kwargs={"torch_dtype": "bfloat16"} if has_cuda else None,
         gradient_checkpointing=has_cuda,
         max_completion_length=CONFIG.training.max_completion_length,
+        # FIX for the OOM that persisted after bf16 + gradient checkpointing:
+        # standard AdamW keeps momentum/variance buffers in fp32 regardless
+        # of model dtype, ~1.5B params * 4 bytes * 2 buffers = ~12GB on its
+        # own, the single largest remaining memory consumer. 8-bit AdamW
+        # (bitsandbytes) keeps the same optimizer semantics but quantizes
+        # those buffers, cutting this to roughly a quarter of its size.
+        # Not a paper-specified detail, a GPU-memory-driven substitution,
+        # document it as such in the logbook.
+        optim="adamw_bnb_8bit" if has_cuda else "adamw_torch",
     )
 
     trainer = AIRTrainer(

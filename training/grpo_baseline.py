@@ -129,6 +129,11 @@ def main() -> None:
         # OOM recurring at a slightly larger step/batch config later.
         gradient_checkpointing=has_cuda,
         max_completion_length=CONFIG.training.max_completion_length,
+        # Same fix as train_air.py: standard AdamW's fp32 optimizer states
+        # (~12GB for this model size) were the dominant remaining memory
+        # cost after the bf16 + gradient-checkpointing fixes. 8-bit AdamW
+        # keeps identical optimizer semantics with quantized buffers.
+        optim="adamw_bnb_8bit" if has_cuda else "adamw_torch",
     )
 
     trainer = GRPOTrainer(
