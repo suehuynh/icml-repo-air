@@ -49,12 +49,15 @@ class TrainingConfig:
     air_lambda: float = 8e-4         # AIR regularization coefficient
 
     # PAPER: 3000 steps on the full mixed (Safety + Moral + Math) dataset.
-    # SUBSTITUTE: Safety-only scope, scaled step count, rebalanced against
-    # per_device_train_batch_size below: 75 steps * 48 rows/step = 3600
-    # total rows processed, matching the original 300-steps * 12-rows/step
-    # plan's total compute. Log the actual value used, this affects your
-    # toy vs full verdict.
-    num_train_steps: int = 75
+    # SUBSTITUTE: Safety-only scope. 750 chosen as a budget-affordable step
+    # toward the paper's 3000 (10x closer than the earlier 75-step plan),
+    # after cost math showed the full 3000 would run well past the $20
+    # budget for BOTH required runs (baseline + AIR) combined at observed
+    # A100-large per-step timing (~9-10s/step at batch=48). Log the actual
+    # value used in the real run, this affects your toy vs full verdict,
+    # a 4x reduction from the paper's step count is a real scope
+    # substitution to report honestly, not full-scale training.
+    num_train_steps: int = 750
 
     # SUBSTITUTE, our own choice (paper doesn't specify batch size, only K).
     # CORRECTED after empirical testing: per_device_train_batch_size is the
