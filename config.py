@@ -41,6 +41,30 @@ class ModelConfig:
 
 
 @dataclass(frozen=True)
+class HubConfig:
+    """
+    CRITICAL, added after a real 6.5-hour training run's checkpoints were
+    lost. HF Jobs containers are fully ephemeral: per HF's own docs, "All
+    files are deleted when the job ends. If results aren't persisted, ALL
+    WORK IS LOST." trainer.save_model() alone only saves inside the
+    container, not anywhere durable. Every real (non-smoke-test) run MUST
+    push to the Hub, and should do so periodically DURING training (not
+    just at the end), so a mid-training timeout kill doesn't lose
+    everything, only progress since the last push.
+    """
+
+    hf_username: str = "suehuynh"
+    baseline_repo_id: str = "suehuynh/icml-air-repro-baseline"
+    air_repo_id: str = "suehuynh/icml-air-repro-air"
+    push_to_hub: bool = True
+    hub_private: bool = True  # keep private during development; make public when ready to submit
+    # Checkpoint + push every N steps during training, not just at the end.
+    # Chosen small relative to num_train_steps so a timeout kill loses at
+    # most this many steps of progress, not the whole run.
+    save_steps: int = 50
+
+
+@dataclass(frozen=True)
 class TrainingConfig:
     # PAPER values, kept as-is since they are cheap to preserve regardless of
     # model scale.
@@ -49,15 +73,18 @@ class TrainingConfig:
     air_lambda: float = 8e-4         # AIR regularization coefficient
 
     # PAPER: 3000 steps on the full mixed (Safety + Moral + Math) dataset.
-    # SUBSTITUTE: Safety-only scope. 750 chosen as a budget-affordable step
-    # toward the paper's 3000 (10x closer than the earlier 75-step plan),
-    # after cost math showed the full 3000 would run well past the $20
-    # budget for BOTH required runs (baseline + AIR) combined at observed
-    # A100-large per-step timing (~9-10s/step at batch=48). Log the actual
-    # value used in the real run, this affects your toy vs full verdict,
-    # a 4x reduction from the paper's step count is a real scope
-    # substitution to report honestly, not full-scale training.
-    num_train_steps: int = 750
+    # SUBSTITUTE: Safety-only scope. REDUCED from 750 to 150 after the
+    # previous 750-step run consumed most of the $20 GPU budget (~$14-16
+    # of it) without a retrievable checkpoint (see HubConfig docstring),
+    # leaving only ~$6 remaining. At the confirmed real rate ($2.50/hr for
+    # a100-large) and observed real per-step timing (16.84s/step for AIR at
+    # batch=48), 150 steps for both baseline + AIR combined costs roughly
+    # $3, leaving buffer for setup/checkpoint-upload overhead within the
+    # remaining budget. This is a real, honest scope reduction (a 20x cut
+    # from the paper's 3000 steps) to report plainly in the logbook, not
+    # full-scale training. Log the actual value used, this affects your
+    # toy vs full verdict.
+    num_train_steps: int = 150
 
     # SUBSTITUTE, our own choice (paper doesn't specify batch size, only K).
     # CORRECTED after empirical testing: per_device_train_batch_size is the
@@ -219,6 +246,7 @@ class Config:
     data: DataConfig = field(default_factory=DataConfig)
     reward: RewardConfig = field(default_factory=RewardConfig)
     claim_targets: ClaimTargets = field(default_factory=ClaimTargets)
+    hub: HubConfig = field(default_factory=HubConfig)
 
     output_dir: str = "./outputs/air_safety_repro"
     logbook_title: str = "Repro: Towards Context-Invariant Safety Alignment (AIR), Safety domain"

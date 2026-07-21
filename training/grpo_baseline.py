@@ -107,6 +107,12 @@ def main() -> None:
         f"it at construction time with a less obvious error. Adjust config.py."
     )
 
+    # CRITICAL, added after a real run's checkpoints were lost to HF Jobs'
+    # ephemeral container filesystem (see config.py's HubConfig docstring).
+    # Disabled during --smoke-test to avoid spamming the Hub repo with
+    # throwaway 2-step debug checkpoints.
+    do_push_to_hub = CONFIG.hub.push_to_hub and not args.smoke_test
+
     grpo_config = GRPOConfig(
         output_dir=CONFIG.output_dir,
         learning_rate=CONFIG.training.learning_rate,
@@ -134,6 +140,13 @@ def main() -> None:
         # cost after the bf16 + gradient-checkpointing fixes. 8-bit AdamW
         # keeps identical optimizer semantics with quantized buffers.
         optim="adamw_bnb_8bit" if has_cuda else "adamw_torch",
+        # Hub persistence, see CRITICAL comment above.
+        push_to_hub=do_push_to_hub,
+        hub_model_id=CONFIG.hub.baseline_repo_id if do_push_to_hub else None,
+        hub_private_repo=CONFIG.hub.hub_private,
+        hub_strategy="every_save" if do_push_to_hub else "end",
+        save_strategy="steps",
+        save_steps=CONFIG.training.num_train_steps if args.smoke_test else CONFIG.hub.save_steps,
     )
 
     trainer = GRPOTrainer(
@@ -152,6 +165,11 @@ def main() -> None:
     trainer.train()
     trainer.save_model(CONFIG.output_dir)
     logger.info("Baseline training complete, saved to %s", CONFIG.output_dir)
+
+    if do_push_to_hub:
+        logger.info("Pushing final model to %s ...", CONFIG.hub.baseline_repo_id)
+        trainer.push_to_hub(commit_message="Final GRPO baseline checkpoint")
+        logger.info("Push complete: https://huggingface.co/%s", CONFIG.hub.baseline_repo_id)
 
 
 if __name__ == "__main__":
