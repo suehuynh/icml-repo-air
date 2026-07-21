@@ -142,6 +142,12 @@ def main() -> None:
         seed=CONFIG.training.seed,
         bf16=has_cuda,
         use_cpu=not has_cuda,
+        # Same OOM fix as grpo_baseline.py: without this, TRL loads the
+        # policy model in fp32 by default (model_init_kwargs=None), and
+        # fp32 weights + fp32 AdamW optimizer states is what caused the
+        # CUDA OOM on a10g-small during real testing.
+        model_init_kwargs={"torch_dtype": "bfloat16"} if has_cuda else None,
+        gradient_checkpointing=has_cuda,
     )
 
     trainer = AIRTrainer(

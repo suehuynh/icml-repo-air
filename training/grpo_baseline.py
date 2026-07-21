@@ -117,6 +117,17 @@ def main() -> None:
         seed=CONFIG.training.seed,
         bf16=has_cuda,
         use_cpu=not has_cuda,
+        # FIX for CUDA OOM: bf16=True above only controls mixed-precision
+        # COMPUTE, not the weights' resting dtype. Without this,
+        # GRPOTrainer loads the policy model in fp32 by default (TRL's
+        # model_init_kwargs defaults to None), which combined with fp32
+        # AdamW optimizer states (2x model size) is what caused the OOM
+        # on a10g-small (22GB) during real testing. Explicitly requesting
+        # bf16 here halves both.
+        model_init_kwargs={"torch_dtype": "bfloat16"} if has_cuda else None,
+        # Trades compute for activation memory, cheap insurance against
+        # OOM recurring at a slightly larger step/batch config later.
+        gradient_checkpointing=has_cuda,
     )
 
     trainer = GRPOTrainer(
