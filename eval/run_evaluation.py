@@ -128,12 +128,54 @@ def main() -> None:
         air_model, air_tokenizer, ood_dataset, max_new_tokens=args.max_new_tokens
     )
 
+    id_report = AnchorAccuracyEvaluator().report(baseline_id_summary, air_id_summary)
+    ood_report = OODConsistencyEvaluator().report(baseline_ood_summary, air_ood_summary)
+
     print("\n" + "=" * 70)
-    print(AnchorAccuracyEvaluator().report(baseline_id_summary, air_id_summary))
+    print(id_report)
     print("=" * 70)
-    print(OODConsistencyEvaluator().report(baseline_ood_summary, air_ood_summary))
+    print(ood_report)
     print("=" * 70)
     print("\nCopy the two report blocks above directly into your Trackio logbook.")
+
+    # BACKSTOP, added given how much trust this project has lost to "should
+    # be fine" assumptions about persistence. Job logs (the print()s above)
+    # should survive after the container is torn down, same as we observed
+    # for the training runs' log output, but this pushes a small durable
+    # copy to the Hub too, costing next to nothing (a few KB of text)
+    # rather than relying solely on log retention.
+    try:
+        from huggingface_hub import HfApi
+        import os
+
+        full_report = (
+            f"Evaluation run: {args.max_id_groups} ID groups, {args.max_ood_groups} OOD groups sampled\n"
+            f"Baseline checkpoint: {args.baseline_checkpoint}\n"
+            f"AIR checkpoint: {args.air_checkpoint}\n\n"
+            f"{id_report}\n\n{ood_report}\n"
+        )
+        report_path = "eval_report.txt"
+        with open(report_path, "w") as f:
+            f.write(full_report)
+
+        api = HfApi(token=os.environ.get("HF_TOKEN") or True)
+        api.upload_file(
+            path_or_fileobj=report_path,
+            path_in_repo="eval_report.txt",
+            repo_id=CONFIG.hub.air_repo_id,
+            repo_type="model",
+        )
+        logger.info(
+            "Backstop copy pushed: https://huggingface.co/%s/blob/main/eval_report.txt",
+            CONFIG.hub.air_repo_id,
+        )
+    except Exception as e:
+        logger.warning(
+            "Could not push backstop report copy to the Hub (%s). The printed "
+            "report above should still be readable via `hf jobs logs`, copy "
+            "it manually now just in case.",
+            e,
+        )
 
 
 if __name__ == "__main__":
