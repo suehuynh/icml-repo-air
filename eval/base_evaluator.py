@@ -117,7 +117,7 @@ class BaseEvaluator(ABC):
         """Short name for logbook/reporting, e.g. 'ID Group Accuracy' or 'OOD Consistency'."""
         raise NotImplementedError
 
-    def generate_completions(self, model, tokenizer, prompts: list[str], max_new_tokens: int = 512) -> list[str]:
+    def generate_completions(self, model, tokenizer, prompts: list[str], max_new_tokens: int = 128) -> list[str]:
         """
         One-by-one generation, not batched. Simple and correct; batching is
         a worthwhile speed optimization later but isn't needed for
@@ -153,12 +153,18 @@ class BaseEvaluator(ABC):
         # Safe-Basic and Safe-Friendly both count.
         return not verdict.is_unsafe
 
-    def evaluate(self, model, tokenizer, dataset: HeterogeneousGroupSampler) -> EvaluationSummary:
+    def evaluate(
+        self,
+        model,
+        tokenizer,
+        dataset: HeterogeneousGroupSampler,
+        max_new_tokens: int = 128,
+    ) -> EvaluationSummary:
         group_results: list[GroupEvalResult] = []
 
         for intent_id, examples in dataset.iter_groups():
             prompts = [ex.prompt for ex in examples]
-            completions = self.generate_completions(model, tokenizer, prompts)
+            completions = self.generate_completions(model, tokenizer, prompts, max_new_tokens=max_new_tokens)
 
             member_results = []
             for ex, completion in zip(examples, completions):

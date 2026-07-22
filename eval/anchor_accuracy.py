@@ -49,7 +49,8 @@ def run_id_evaluation(
     tokenizer,
     id_dataset: HeterogeneousGroupSampler,
     judge=None,
+    max_new_tokens: int = 128,
 ) -> EvaluationSummary:
     """Convenience entry point: instantiate evaluator, run, return summary."""
     evaluator = AnchorAccuracyEvaluator(judge=judge)
-    return evaluator.evaluate(model, tokenizer, id_dataset)
+    return evaluator.evaluate(model, tokenizer, id_dataset, max_new_tokens=max_new_tokens)

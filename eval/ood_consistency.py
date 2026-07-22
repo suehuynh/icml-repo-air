@@ -55,6 +55,7 @@ def run_ood_evaluation(
     tokenizer,
     ood_dataset: HeterogeneousGroupSampler,
     judge=None,
+    max_new_tokens: int = 128,
 ) -> EvaluationSummary:
     evaluator = OODConsistencyEvaluator(judge=judge)
-    return evaluator.evaluate(model, tokenizer, ood_dataset)
+    return evaluator.evaluate(model, tokenizer, ood_dataset, max_new_tokens=max_new_tokens)

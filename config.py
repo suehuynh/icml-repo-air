@@ -33,11 +33,16 @@ class ModelConfig:
     judge_model_name: str = "Qwen/Qwen2.5-1.5B-Instruct"
 
     # PAPER: final evaluation re-scoring done with GPT-4.1 for all baselines.
-    # DECISION PENDING: confirm whether to spend a small amount of external
-    # API budget on the final scoring pass only, or substitute with an open
-    # judge end to end. Leaving as an explicit flag rather than guessing.
+    # DECISION: given only a few dollars of GPU credit remain after the
+    # training runs, a 32B judge is no longer practical (extra download
+    # time, extra VRAM, extra $ for eval-time generation). Substituted with
+    # the SAME small model already used as the training-time judge, a
+    # second, budget-driven substitution beyond the original GPT-4.1 ->
+    # open-model swap. This weakens judge quality further than originally
+    # planned; document both substitutions (GPT-4.1 -> 32B -> 1.5B) plainly
+    # in the logbook rather than only mentioning the first.
     final_eval_judge_is_external_api: bool = False
-    final_eval_judge_model_name: str = "Qwen/Qwen2.5-32B-Instruct"
+    final_eval_judge_model_name: str = "Qwen/Qwen2.5-1.5B-Instruct"
 
 
 @dataclass(frozen=True)
