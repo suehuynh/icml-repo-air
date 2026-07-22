@@ -10,6 +10,13 @@ as incorrect.
 
 Much cheaper than a full eval run: no judge model loaded, no facet
 scoring, just a few generations.
+
+RESULT FROM FIRST USE (documented here for context): confirmed that
+max_completion_length=128 causes many open-variant completions to be cut
+off before the closing </answer> tag appears, which the strict extractor
+(rewards/format_reward.py, used during training) would treat as fully
+unparseable. See eval/base_evaluator.py's extract_answer_content_lenient
+for the eval-time fix this diagnostic motivated.
 """
 
 from __future__ import annotations
@@ -25,7 +32,9 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", required=True, help="Local path or Hub repo ID.")
-    parser.add_argument("--num-prompts", type=int, default=3, help="How many prompts to sample (kept small on purpose).")
+    parser.add_argument(
+        "--num-prompts", type=int, default=3, help="How many prompts to sample (kept small on purpose)."
+    )
     parser.add_argument("--max-new-tokens", type=int, default=128)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
